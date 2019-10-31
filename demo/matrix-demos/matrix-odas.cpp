@@ -9,6 +9,10 @@
 #include <array>
 #include <iostream>
 
+// Not currently being used
+#include <fstream>
+#include <stdio.h>
+
 #include <time.h>
 
 
@@ -63,6 +67,9 @@ int max_energy;
 
 //store previous angle
 int old_servo_angle = 0;
+
+// not currently being used
+int target_count = 0;
 
 bool reached;
 
@@ -166,8 +173,8 @@ void json_parse(json_object *jobj) {
 }
 
 int main(int argc, char *argv[]) {
-  reached = true;
 
+  reached = true;
 
   // Everloop Initialization
   hal::MatrixIOBus bus;
@@ -254,37 +261,39 @@ int main(int argc, char *argv[]) {
       if (color > max_energy && led_angle < 190 && reached == true) {
         max_energy = color;
         target_servo_angle = led_angle;
-      }
 
+        target_count++; //for future use in eye animation
+      }
 
       // Removing colors below the threshold
       color = (color < MIN_THRESHOLD) ? 0 : color;
 
-      image1d.leds[i].red = 0;
+      image1d.leds[i].red = color;
       image1d.leds[i].green = 0;
-      image1d.leds[i].blue = color;
+      image1d.leds[i].blue = 0;
       image1d.leds[i].white = 0;
 
     }
 
-    everloop.Write(&image1d);
-
     //set servo angle incrementally till you reach within 2 degrees of target
-    if (old_servo_angle < target_servo_angle-2) {
-        old_servo_angle += GRANULARITY;
+    if (old_servo_angle < (target_servo_angle-2)) {
+        old_servo_angle = old_servo_angle + GRANULARITY;
+        std::cout << "increasing" << std::endl;
         reached = false;
-    } else if (old_servo_angle > target_servo_angle+2) {
-        old_servo_angle -= GRANULARITY;
+    } else if (old_servo_angle > (target_servo_angle+2)) {
+        old_servo_angle = old_servo_angle - GRANULARITY;
+        std::cout << "decreasing" << std::endl;
         reached = false;
     } else {
       reached = true;
     }
 
+    everloop.Write(&image1d);
 
     gpio.SetServoAngle((float) (old_servo_angle), min_pulse_ms, pin);
-
-  
-    std::cout << "Angle : " << old_servo_angle << std::endl;
+    std::cout << "Old Angle : " << old_servo_angle << std::endl;
+    std::cout << "Target Angle : " << target_servo_angle << std::endl;
+    std::cout << reached << std::endl;
 
     max_energy = 15;
 

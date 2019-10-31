@@ -270,10 +270,10 @@ int main(int argc, char *argv[]) {
     everloop.Write(&image1d);
 
     //set servo angle incrementally till you reach within 2 degrees of target
-    if (old_servo_angle < target_servo_angle-2) {
+    if (old_servo_angle < (target_servo_angle-2)) {
         old_servo_angle += GRANULARITY;
         reached = false;
-    } else if (old_servo_angle > target_servo_angle+2) {
+    } else if (old_servo_angle > (target_servo_angle+2)) {
         old_servo_angle -= GRANULARITY;
         reached = false;
     } else {

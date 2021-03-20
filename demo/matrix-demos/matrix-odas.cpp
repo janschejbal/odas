@@ -16,10 +16,10 @@ namespace hal = matrix_hal;
 // MAX_VALUE : controls smoothness
 #define MAX_VALUE 200
 // INCREMENT : controls sensitivity
-#define INCREMENT 20
-// DECREMENT : controls delay in the dimming
-#define DECREMENT 1
-// MAX_BRIGHTNESS: Filters out low energy
+#define INCREMENT 100
+// DEFAULT_DECREMENT : controls delay in the dimming
+#define DEFAULT_DECREMENT 5
+// MIN_THRESHOLD: Filters out low energy
 #define MIN_THRESHOLD 10
 // MAX_BRIGHTNESS: 0 - 255
 #define MAX_BRIGHTNESS 50
@@ -36,6 +36,7 @@ const double led_angles_mvoice[18] = {170, 150, 130, 110, 90,  70,
                                       290, 270, 250, 230, 210, 190};
 
 void increase_pots() {
+  // printf("Increase: x=%f, y=%f, z=%f, E=%f\n", x, y, z, E);
   // Convert x,y to angle. TODO: See why x axis from ODAS is inverted
   double angle_xy = fmodf((atan2(y, x) * (180.0 / M_PI)) + 360, 360);
   // Convert angle to index
@@ -47,9 +48,10 @@ void increase_pots() {
       energy_array[i_angle] > MAX_VALUE ? MAX_VALUE : energy_array[i_angle];
 }
 
-void decrease_pots() {
+void decrease_pots(int amount) {
   for (int i = 0; i < ENERGY_COUNT; i++) {
-    energy_array[i] -= (energy_array[i] > 0) ? DECREMENT : 0;
+    int new_val = energy_array[i] - amount;
+    energy_array[i] = (new_val > 0) ? new_val : 0;
   }
 }
 
@@ -85,7 +87,6 @@ void json_parse_array(json_object *jobj, char *key) {
 void json_parse(json_object *jobj) {
   enum json_type type;
   unsigned int count = 0;
-  decrease_pots();
   json_object_object_foreach(jobj, key, val) {
     type = json_object_get_type(val);
     switch (type) {
@@ -94,15 +95,17 @@ void json_parse(json_object *jobj) {
       case json_type_double:
         if (!strcmp(key, "x")) {
           x = json_object_get_double(val);
+          count++;
         } else if (!strcmp(key, "y")) {
           y = json_object_get_double(val);
+          count++;
         } else if (!strcmp(key, "z")) {
           z = json_object_get_double(val);
+          count++;
         } else if (!strcmp(key, "E")) {
           E = json_object_get_double(val);
+          count++;
         }
-        increase_pots();
-        count++;
         break;
       case json_type_int:
         break;
@@ -119,6 +122,9 @@ void json_parse(json_object *jobj) {
         json_parse_array(jobj, key);
         break;
     }
+  }
+  if (count == 4) {
+    increase_pots();
   }
 }
 
@@ -140,6 +146,14 @@ int main(int argc, char *argv[]) {
   everloop.Write(&image1d);
 
   char verbose = 0x00;
+
+  int decay = 0;
+  if (argc == 2) {
+    decay = strtol(argv[1], NULL, 10);
+  }
+  if (decay == 0) {
+    decay = DEFAULT_DECREMENT;
+  }
 
   int server_id;
   struct sockaddr_in server_address;
@@ -181,6 +195,7 @@ int main(int argc, char *argv[]) {
 
     // printf("message: %s\n\n", message);
     json_object *jobj = json_tokener_parse(message);
+    decrease_pots(decay);
     json_parse(jobj);
 
     for (int i = 0; i < bus.MatrixLeds(); i++) {
@@ -191,9 +206,9 @@ int main(int argc, char *argv[]) {
       // Convert from angle to pots index
       int index_pots = led_angle * ENERGY_COUNT / 360;
       // Mapping from pots values to color
-      int color = energy_array[index_pots] * MAX_BRIGHTNESS / MAX_VALUE;
-      // Removing colors below the threshold
-      color = (color < MIN_THRESHOLD) ? 0 : color;
+      int color = (energy_array[index_pots] - MIN_THRESHOLD) *
+                      MAX_BRIGHTNESS / (MAX_VALUE - MIN_THRESHOLD);
+      color = color > 0 ? color : 0;
 
       image1d.leds[i].red = 0;
       image1d.leds[i].green = 0;
